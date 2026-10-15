@@ -1,0 +1,407 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>CASH BACK</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap">
+<style>
+/* Layout: one narrow column, brand header, bottom tab bar per role. Green = cash, blue = trust. */
+:root{
+  --bg:#f1f6f2; --surface:#ffffff; --ink:#10231a; --mute:#5a6b61; --line:#d9e4dc;
+  --brand:#15803d; --on-brand:#ffffff; --soft:#e3f4e8;
+  --blue:#1d4ed8; --on-blue:#ffffff; --danger:#b91c1c;
+  --warn-bg:#fff4dd; --warn:#7a4f00;
+  --font:'Cairo',system-ui,'Segoe UI',Tahoma,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c1511; --surface:#141f19; --ink:#e5efe8; --mute:#93a79b; --line:#233328;
+    --brand:#4ade80; --on-brand:#052412; --soft:#16301f;
+    --blue:#8fb0ff; --on-blue:#08153a; --danger:#fca5a5;
+    --warn-bg:#33270b; --warn:#f5c26b; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c1511; --surface:#141f19; --ink:#e5efe8; --mute:#93a79b; --line:#233328;
+  --brand:#4ade80; --on-brand:#052412; --soft:#16301f;
+  --blue:#8fb0ff; --on-blue:#08153a; --danger:#fca5a5;
+  --warn-bg:#33270b; --warn:#f5c26b; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.55;
+  padding-block:0 88px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));}
+#app{max-width:560px;margin:0 auto;min-width:0}
+button,input,select{font-family:inherit;font-size:1rem}
+.hdr{background:var(--brand);color:var(--on-brand);padding:14px 16px;display:flex;justify-content:space-between;align-items:center;margin-top:12px;border-radius:10px}
+.hdr b{display:block;font-weight:800;font-size:1.15rem;letter-spacing:.02em}
+.hdr small{opacity:.85}
+.link{background:none;border:0;color:inherit;font-weight:600;text-decoration:underline;cursor:pointer;padding:6px}
+main{display:flex;flex-direction:column;gap:12px;padding-block:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.card.hero{background:var(--blue);color:var(--on-blue);border-color:transparent}
+.card.hero .k{color:inherit;opacity:.8}
+h2{font-size:1.05rem;margin:0 0 6px;font-weight:800;text-wrap:balance}
+h3{font-size:.95rem;margin:6px 0 0;font-weight:800}
+.k{color:var(--mute);font-size:.88rem}
+.big{font-size:2rem;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.2}
+.line{display:flex;justify-content:space-between;gap:12px;padding:4px 0;font-variant-numeric:tabular-nums}
+.line>span{color:var(--mute)}
+.line.b>b,.line.b>span{color:var(--ink);font-weight:800}
+.line.pos>b{color:var(--brand)}
+.err{color:var(--danger);margin:6px 0 0;font-size:.92rem}
+.note{background:var(--warn-bg);color:var(--warn);border-radius:10px;padding:10px 12px;font-size:.9rem}
+.btn{display:block;width:100%;border:0;border-radius:10px;padding:12px;background:var(--brand);color:var(--on-brand);font-weight:800;cursor:pointer;margin-top:8px}
+.btn.alt{background:var(--blue);color:var(--on-blue)}
+.btn.danger{background:var(--danger);color:#fff}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn:focus-visible,.tabs button:focus-visible,.link:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.pair{display:flex;gap:8px}.pair>*{flex:1}
+label{display:block;margin-top:10px;color:var(--mute);font-size:.88rem}
+input,select{display:block;width:100%;margin-top:4px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.tabs{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--surface);border-top:1px solid var(--line);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs button{flex:1;background:none;border:0;border-top:3px solid transparent;padding:13px 4px;color:var(--mute);font-weight:600;cursor:pointer}
+.tabs button.on{color:var(--blue);border-top-color:var(--blue);font-weight:800}
+.code{font-size:2.6rem;font-weight:800;letter-spacing:.3em;text-align:center;font-variant-numeric:tabular-nums;direction:ltr}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:6px}
+.bar>i{display:block;height:100%;background:var(--brand)}
+.pill{display:inline-block;padding:1px 10px;border-radius:99px;font-size:.82rem;font-weight:600;background:var(--soft);color:var(--brand)}
+.pill.off{background:var(--warn-bg);color:var(--warn)}
+.home{min-height:80vh;display:flex;flex-direction:column;justify-content:center;gap:4px}
+.logo{font-size:2.4rem;font-weight:800;text-align:center;color:var(--brand);letter-spacing:.03em}
+.tag{text-align:center;color:var(--mute);margin-bottom:22px}
+.pick{display:block;width:100%;text-align:right;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;font-weight:600;color:var(--ink);cursor:pointer}
+.mono{direction:ltr;unicode-bidi:plaintext;display:inline-block}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;max-width:90vw;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+
+<div id="app" dir="rtl" lang="ar"></div>
+<div id="toast" role="status" aria-live="polite" dir="rtl"></div>
+
+<script>
+/* ---------- محرك الحسابات (نفس محرك التطبيق، مختبر على مثال الملف) ---------- */
+const r2 = x => Math.round(x * 100) / 100;
+const uid = p => p + Math.random().toString(36).slice(2, 9);
+const find = (arr, id, msg) => { const x = arr.find(a => a.id === id); if (!x) throw new Error(msg); return x; };
+const log = (actor, action, detail) => S.audit.unshift({ t: Date.now(), actor, action, detail: String(detail ?? '') });
+
+const initial = () => ({
+  settings: { commission: 6, cashback: 4, invoiceMinutes: 15 },
+  platform: 0,
+  merchants: [{ id: 'm1', name: 'مطعم الأصيل', digital: 0, funded: 0, real: 0, bank: 0, bankName: '', bankAccount: '' }],
+  customers: [{ id: 'c1', name: 'أحمد', wallet: 0 }],
+  topups: [], invoices: [], txns: [], audit: [], banks: []
+});
+
+const L = {
+  addMerchant(name) {
+    if (!name.trim()) throw new Error('اكتب اسم المحل');
+    const m = { id: uid('m'), name: name.trim(), digital: 0, funded: 0, real: 0, bank: 0, bankName: '', bankAccount: '' };
+    S.merchants.push(m); log('system', 'تسجيل تاجر', m.name); return m;
+  },
+  addCustomer(name) {
+    if (!name.trim()) throw new Error('اكتب الاسم');
+    const c = { id: uid('c'), name: name.trim(), wallet: 0 };
+    S.customers.push(c); log('system', 'تسجيل زبون', c.name); return c;
+  },
+  setMerchantBank(mid, bankName, acc) {
+    const m = find(S.merchants, mid, 'تاجر غير موجود');
+    m.bankName = bankName.trim(); m.bankAccount = acc.trim();
+    log(mid, 'تحديث الحساب البنكي', '****' + m.bankAccount.slice(-4));
+  },
+  requestTopup(mid, amount) {
+    amount = Number(amount);
+    if (!(amount > 0)) throw new Error('المبلغ غير صحيح');
+    find(S.merchants, mid, 'تاجر غير موجود');
+    const t = { id: uid('t'), mid, amount, status: 'pending', at: Date.now() };
+    S.topups.unshift(t); log(mid, 'طلب شحن', amount); return t;
+  },
+  approveTopup(id) {
+    const t = find(S.topups, id, 'الطلب غير موجود');
+    if (t.status !== 'pending') throw new Error('الطلب تمت معالجته');
+    const m = find(S.merchants, t.mid, 'تاجر غير موجود');
+    const fee = r2(t.amount * S.settings.commission / 100), net = r2(t.amount - fee);
+    m.digital = r2(m.digital + net); m.funded = r2((m.funded || 0) + net); m.real = r2(m.real + net);
+    S.platform = r2(S.platform + fee); t.status = 'approved';
+    log('admin', 'موافقة شحن', `${m.name} ${t.amount} (عمولة ${fee})`);
+  },
+  rejectTopup(id) {
+    const t = find(S.topups, id, 'الطلب غير موجود');
+    if (t.status !== 'pending') throw new Error('الطلب تمت معالجته');
+    t.status = 'rejected'; log('admin', 'رفض شحن', `${t.mid} ${t.amount}`);
+  },
+  createInvoice(mid, amount) {
+    amount = Number(amount);
+    if (!(amount > 0)) throw new Error('المبلغ غير صحيح');
+    find(S.merchants, mid, 'تاجر غير موجود');
+    const inv = { id: uid('inv'), code: String(Math.floor(100000 + Math.random() * 900000)), mid, amount,
+      exp: Date.now() + S.settings.invoiceMinutes * 60000, used: false };
+    S.invoices.unshift(inv); log(mid, 'إنشاء فاتورة', `${inv.code} / ${amount}`); return inv;
+  },
+  payInvoice(code, cid) {
+    const inv = S.invoices.find(i => i.code === code);
+    if (!inv) throw new Error('كود الفاتورة غير صحيح');
+    if (inv.used) throw new Error('الفاتورة مدفوعة من قبل');
+    if (Date.now() > inv.exp) throw new Error('انتهت صلاحية الفاتورة');
+    const m = find(S.merchants, inv.mid, 'تاجر غير موجود');
+    const c = find(S.customers, cid, 'زبون غير موجود');
+    if (m.digital < inv.amount) throw new Error('رصيد التاجر الرقمي غير كافٍ، لازم يعيد الشحن');
+    const cb = r2(inv.amount * S.settings.cashback / 100);
+    if (S.platform < cb) throw new Error('رصيد CASH BACK غير كافٍ للكاش باك');
+    m.bank = r2(m.bank + inv.amount); m.digital = r2(m.digital - inv.amount);
+    S.platform = r2(S.platform - cb); c.wallet = r2(c.wallet + cb); inv.used = true;
+    const tx = { id: uid('x'), t: Date.now(), mid: m.id, cid, amount: inv.amount, cashback: cb };
+    S.txns.unshift(tx); log(cid, 'دفع فاتورة', `${m.name} ${inv.amount} كاش باك ${cb}`); return tx;
+  },
+  addBank(o) {
+    if (!o.name.trim() || !o.number.trim()) throw new Error('اسم البنك ورقم الحساب مطلوبين');
+    const b = { id: uid('b'), name: o.name.trim(), holder: o.holder.trim(), number: o.number.trim(), kind: o.kind, hasKey: !!o.hasKey, status: 'غير مربوط' };
+    S.banks.push(b); log('admin', 'إضافة حساب بنكي', `${b.name} ****${b.number.slice(-4)}`); return b;
+  },
+  linkBank(id) {
+    const b = find(S.banks, id, 'الحساب غير موجود');
+    if (!b.hasKey) throw new Error('أدخل مفتاح الربط (API Key) أولاً');
+    b.status = 'مربوط (تجريبي)'; log('admin', 'ربط حساب بنكي', b.name);
+  },
+  removeBank(id) {
+    const b = find(S.banks, id, 'الحساب غير موجود');
+    S.banks = S.banks.filter(x => x.id !== id); log('admin', 'حذف حساب بنكي', b.name);
+  },
+  setRates(c, k) {
+    c = Number(c); k = Number(k);
+    if (!(c >= 0) || !(k >= 0) || k > c) throw new Error('النسب غير صحيحة (الكاش باك لازم ما يزيد عن العمولة)');
+    S.settings.commission = c; S.settings.cashback = k; log('admin', 'تعديل النسب', `${c}% / ${k}%`);
+  }
+};
+
+/* ---------- مكان بوابة الدفع (فاضي حالياً) ----------
+   لما تتوفر وثائق البوابة نملأ charge و refund هنا فقط.
+   الربط الحقيقي لازم يتم من خادم، مش من المتصفح، لأن المفاتيح السرية ما تنحط في صفحة ويب. */
+const paymentProvider = {
+  name: 'غير مربوط',
+  async charge({ amount, invoiceCode, customerId }) {
+    return { ok: true, reference: 'MOCK-' + Date.now(), mock: true };
+  },
+  async refund({ reference, amount }) {
+    return { ok: false, error: 'الاسترجاع غير مفعّل بعد' };
+  }
+};
+
+/* ---------- التخزين على هذا الجهاز ---------- */
+const KEY = 'cashback_web_v1';
+let S = (() => { try { const v = localStorage.getItem(KEY); if (v) return JSON.parse(v); } catch (e) {} return initial(); })();
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+const keyGet = id => { try { return localStorage.getItem('cb_key_' + id); } catch (e) { return null; } };
+
+/* ---------- أدوات العرض ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' د.ل';
+const hm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+const line = (a, b, cls = '') => `<div class="line ${cls}"><span>${a}</span><b>${b}</b></div>`;
+const ui = { role: null, actor: null, tab: '', last: null, confirmReset: false };
+let toastT;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3200);
+}
+function run(fn) {
+  try { const r = fn(); save(); render(); return r === undefined ? true : r; }
+  catch (e) { toast(e.message); return null; }
+}
+
+/* ---------- الشاشات ---------- */
+function shell(sub, tabs, body) {
+  return `<div class="hdr"><div><b>CASH BACK</b><small>${sub}</small></div><button class="link" data-act="exit">خروج</button></div>
+  <main>${body}</main>
+  <nav class="tabs">${tabs.map(([k, l]) => `<button data-act="tab" data-v="${k}" class="${ui.tab === k ? 'on' : ''}">${l}</button>`).join('')}</nav>`;
+}
+
+function home() {
+  return `<div class="home">
+    <div class="logo">CASH BACK</div>
+    <div class="tag">كاش باك على كل بيعة</div>
+    <button class="btn" data-act="role" data-v="customer">أنا زبون</button>
+    <button class="btn alt" data-act="role" data-v="merchant">أنا تاجر</button>
+    <button class="btn ghost" data-act="role" data-v="admin">دخول المدير</button>
+    <div class="note" style="margin-top:18px">نسخة تجريبية. الدفع والبنوك محاكاة، والبيانات محفوظة على هذا الجهاز فقط.</div>
+  </div>`;
+}
+
+function pick() {
+  const list = ui.role === 'customer' ? S.customers : S.merchants;
+  return `<main style="padding-top:24px">
+    <h2>${ui.role === 'customer' ? 'اختر حسابك' : 'اختر محلك'}</h2>
+    ${list.map(x => `<button class="pick" data-act="pick" data-v="${x.id}">${esc(x.name)}</button>`).join('')}
+    <div class="card"><label for="name" style="margin-top:0">${ui.role === 'customer' ? 'تسجيل زبون جديد' : 'تسجيل تاجر جديد'}</label>
+      <input id="name" placeholder="الاسم" autocomplete="off">
+      <button class="btn" data-act="register">تسجيل</button></div>
+    <button class="btn ghost" data-act="exit">رجوع</button></main>`;
+}
+
+function previewHtml(code) {
+  if (code.length < 6) return '';
+  const inv = S.invoices.find(i => i.code === code);
+  if (!inv) return '<p class="err">كود غير صحيح</p>';
+  const m = S.merchants.find(x => x.id === inv.mid);
+  const msg = inv.used ? 'الفاتورة مدفوعة من قبل' : (Date.now() > inv.exp ? 'انتهت صلاحية الفاتورة' : '');
+  return line('التاجر', esc(m && m.name)) + line('المبلغ', fmt(inv.amount), 'b') + line('كاش باك لك', fmt(inv.amount * S.settings.cashback / 100), 'pos') + (msg ? `<p class="err">${msg}</p>` : '');
+}
+
+function customer() {
+  const c = find(S.customers, ui.actor, 'x');
+  const mine = S.txns.filter(t => t.cid === c.id);
+  let body;
+  if (ui.tab === 'wallet') {
+    body = `<div class="card hero"><div class="k">رصيد الكاش باك</div><div class="big">${fmt(c.wallet)}</div></div>
+      <h3>آخر العمليات</h3>
+      ${mine.length ? mine.map(t => { const m = S.merchants.find(x => x.id === t.mid); return `<div class="card">${line(esc(m && m.name) + ' • ' + hm(t.t), fmt(t.amount), 'b')}${line('كاش باك', '+' + fmt(t.cashback), 'pos')}</div>`; }).join('') : '<p class="k">ما فيش عمليات بعد.</p>'}`;
+  } else {
+    body = `<div class="card"><h2>دفع فاتورة</h2><div class="k">أدخل كود الفاتورة (6 أرقام) من التاجر</div>
+      <label for="code" style="margin-top:6px">كود الفاتورة</label>
+      <input id="code" inputmode="numeric" maxlength="6" placeholder="000000" dir="ltr" autocomplete="off">
+      <div id="prev"></div>
+      <button class="btn" data-act="pay">تأكيد الدفع</button>
+      <p class="k">الدفع بالبطاقة محاكاة حالياً. بوابة الدفع الحقيقية تنربط لاحقاً.</p></div>`;
+  }
+  return shell('زبون: ' + esc(c.name), [['wallet', 'محفظتي'], ['pay', 'دفع فاتورة']], body);
+}
+
+function merchant() {
+  const m = find(S.merchants, ui.actor, 'x');
+  const sales = S.txns.filter(t => t.mid === m.id);
+  const total = sales.reduce((a, t) => a + t.amount, 0), cbp = sales.reduce((a, t) => a + t.cashback, 0);
+  let body;
+  if (ui.tab === 'home') {
+    const funded = m.funded || m.digital, pct = funded ? Math.max(0, Math.min(100, m.digital / funded * 100)) : 0;
+    body = `<div class="card"><h2>المحفظة الرقمية (حد التمويل)</h2><div class="big">${fmt(m.digital)}</div>
+        <div class="bar"><i style="width:${pct}%"></i></div>
+        ${m.digital <= 100 ? '<p class="err">الرقمية قربت تخلص، اطلب شحن جديد</p>' : ''}</div>
+      <div class="card"><h2>المحفظة الحقيقية (ضمان)</h2><div class="big" style="font-size:1.5rem">${fmt(m.real)}</div><div class="k">محجوزة كضمان ولا تتسحب</div></div>
+      <div class="card">${line('محوّل لبنكك (محاكاة)', fmt(m.bank), 'b')}${line('إجمالي المبيعات', fmt(total))}${line('كاش باك للزبائن', fmt(cbp))}${line('عدد العمليات', sales.length)}</div>
+      <h3>سجل العمليات</h3>
+      ${sales.map(t => { const c = S.customers.find(x => x.id === t.cid); return `<div class="card">${line(esc(c && c.name) + ' • ' + hm(t.t), fmt(t.amount), 'b')}</div>`; }).join('') || '<p class="k">ما فيش عمليات بعد.</p>'}`;
+  } else if (ui.tab === 'invoice') {
+    const last = ui.last && S.invoices.find(i => i.id === ui.last);
+    const act = S.invoices.filter(i => i.mid === m.id && !i.used && Date.now() <= i.exp);
+    body = `<div class="card"><h2>فاتورة جديدة</h2><label for="amt" style="margin-top:0">مبلغ الفاتورة (د.ل)</label>
+      <input id="amt" inputmode="decimal" placeholder="100"><button class="btn" data-act="mkinv">إنشاء فاتورة</button></div>
+      ${last ? `<div class="card"><div class="k" style="text-align:center">كود الفاتورة للزبون</div><div class="code">${last.code}</div>
+        <div style="text-align:center">${fmt(last.amount)} • صالح ${S.settings.invoiceMinutes} دقيقة</div></div>` : ''}
+      ${act.length ? '<h3>فواتير نشطة</h3>' + act.map(i => `<div class="card">${line('كود <span class="mono">' + i.code + '</span>', fmt(i.amount), 'b')}</div>`).join('') : ''}`;
+  } else if (ui.tab === 'topup') {
+    body = `<div class="card"><h2>طلب شحن</h2>
+      <p class="k">1) تحوّل المبلغ الحقيقي. 2) المدير يوافق. 3) ينزل لك رقمي بعد خصم عمولة ${S.settings.commission}%.</p>
+      <label for="tp">المبلغ (د.ل)</label><input id="tp" inputmode="decimal" value="1000">
+      <p class="k" id="tpnet"></p><button class="btn" data-act="topup">إرسال الطلب للمدير</button></div>
+      ${S.topups.filter(t => t.mid === m.id).map(t => `<div class="card">${line({ pending: 'قيد المراجعة', approved: 'تمت الموافقة', rejected: 'مرفوض' }[t.status], fmt(t.amount), 'b')}</div>`).join('')}`;
+  } else {
+    body = `<div class="card"><h2>حسابك البنكي لاستلام المبيعات</h2>
+      <label for="mb_name">اسم البنك</label><input id="mb_name" value="${esc(m.bankName)}">
+      <label for="mb_acc">رقم الحساب / IBAN</label><input id="mb_acc" value="${esc(m.bankAccount)}" dir="ltr">
+      <button class="btn" data-act="mbank">حفظ</button></div>`;
+  }
+  return shell('تاجر: ' + esc(m.name), [['home', 'الرئيسية'], ['invoice', 'فاتورة'], ['topup', 'شحن'], ['bank', 'حسابي البنكي']], body);
+}
+
+function bankForm() {
+  return `<div class="card"><h2>إضافة حساب بنكي</h2>
+    <label for="b_name" style="margin-top:0">اسم البنك</label><input id="b_name" placeholder="مثال: بنك الجمهورية">
+    <label for="b_holder">اسم صاحب الحساب</label><input id="b_holder">
+    <label for="b_num">رقم الحساب / IBAN</label><input id="b_num" dir="ltr">
+    <label for="b_key">مفتاح الربط (API Key)</label><input id="b_key" type="password" dir="ltr" autocomplete="off">
+    <label for="b_kind">نوع الحساب</label>
+    <select id="b_kind"><option value="platform">حساب CASH BACK (استلام العمولة ودفع الكاش باك)</option><option value="settlement">حساب تسوية</option></select>
+    <p class="note" style="margin-top:10px">للتجربة فقط: لا تدخل مفاتيح حقيقية. المفتاح يتخزن في متصفح هذا الجهاز وليس في مكان آمن.</p>
+    <button class="btn" data-act="addbank">حفظ الحساب</button></div>
+  <h3>الحسابات المحفوظة (${S.banks.length})</h3>
+  ${S.banks.map(b => `<div class="card">${line('البنك', esc(b.name), 'b')}${line('صاحب الحساب', esc(b.holder) || '-')}${line('رقم الحساب', '<span class="mono">****' + esc(b.number.slice(-4)) + '</span>')}
+    ${line('النوع', b.kind === 'platform' ? 'CASH BACK' : 'تسوية')}${line('مفتاح الربط', b.hasKey && keyGet(b.id) ? 'محفوظ' : (b.hasKey ? 'محفوظ (غير ظاهر على هذا الجهاز)' : 'غير موجود'))}
+    ${line('الحالة', `<span class="pill ${b.status === 'غير مربوط' ? 'off' : ''}">${b.status}</span>`)}
+    <div class="pair"><button class="btn" data-act="linkbank" data-v="${b.id}">ربط</button><button class="btn danger" data-act="delbank" data-v="${b.id}">حذف</button></div></div>`).join('') || '<p class="k">ما فيش حسابات بعد.</p>'}`;
+}
+
+function admin() {
+  const sales = S.txns.reduce((a, t) => a + t.amount, 0), cbp = S.txns.reduce((a, t) => a + t.cashback, 0);
+  const pending = S.topups.filter(t => t.status === 'pending');
+  let body;
+  if (ui.tab === 'overview') {
+    body = `<div class="card">${line('تجار', S.merchants.length)}${line('زبائن', S.customers.length)}${line('إجمالي المبيعات', fmt(sales), 'b')}${line('محفظة CASH BACK', fmt(S.platform), 'b')}${line('كاش باك مدفوع', fmt(cbp))}</div>
+      <h3>التجار</h3>
+      ${S.merchants.map(m => `<div class="card">${line(esc(m.name), 'رقمي ' + fmt(m.digital), 'b')}${line('حقيقي (ضمان)', fmt(m.real))}${line('محوّل لبنكه', fmt(m.bank))}</div>`).join('')}
+      <h3>سجل التدقيق</h3>
+      ${S.audit.slice(0, 30).map(a => `<div class="card" style="padding:10px">${line(hm(a.t) + ' • ' + esc(a.actor), esc(a.action), 'b')}<div class="k">${esc(a.detail)}</div></div>`).join('') || '<p class="k">ما فيش عمليات بعد.</p>'}`;
+  } else if (ui.tab === 'requests') {
+    body = pending.length ? pending.map(t => {
+      const m = S.merchants.find(x => x.id === t.mid), fee = t.amount * S.settings.commission / 100, net = t.amount - fee;
+      return `<div class="card"><h2>${esc(m && m.name)} • ${fmt(t.amount)}</h2>
+        ${line('الرقمية', `+${fmt(t.amount)} − ${fmt(fee)} = ${fmt(net)}`)}${line('الحقيقية', `+${fmt(t.amount)} − ${fmt(fee)} = ${fmt(net)}`)}${line('CASH BACK', '+' + fmt(fee), 'pos')}
+        <div class="pair"><button class="btn" data-act="approve" data-v="${t.id}">موافقة</button><button class="btn danger" data-act="reject" data-v="${t.id}">رفض</button></div></div>`;
+    }).join('') : '<p class="k">ما فيش طلبات شحن جديدة.</p>';
+  } else if (ui.tab === 'banks') {
+    body = bankForm();
+  } else {
+    body = `<div class="card"><h2>النسب</h2>
+      <label for="r_c" style="margin-top:0">عمولة CASH BACK %</label><input id="r_c" inputmode="decimal" value="${S.settings.commission}">
+      <label for="r_k">كاش باك الزبون %</label><input id="r_k" inputmode="decimal" value="${S.settings.cashback}">
+      <button class="btn" data-act="rates">حفظ النسب</button></div>
+      <div class="card"><h2>بيانات التجربة</h2>
+      ${ui.confirmReset ? '<p class="err">سيتم مسح كل شيء: التجار والزبائن والعمليات والحسابات البنكية.</p><div class="pair"><button class="btn danger" data-act="doreset">تأكيد المسح</button><button class="btn ghost" data-act="cancelreset">إلغاء</button></div>'
+        : '<button class="btn danger" data-act="askreset">مسح كل البيانات والبدء من جديد</button>'}</div>`;
+  }
+  return shell('لوحة المدير', [['overview', 'نظرة'], ['requests', `الطلبات (${pending.length})`], ['banks', 'البنوك'], ['settings', 'الإعدادات']], body);
+}
+
+function render() {
+  const app = $('#app');
+  app.innerHTML = !ui.role ? home() : ui.role === 'admin' ? admin() : !ui.actor ? pick() : ui.role === 'customer' ? customer() : merchant();
+  const tp = $('#tp'); if (tp) updNet();
+}
+function updNet() { const tp = $('#tp'), n = $('#tpnet'); if (tp && n) n.textContent = 'صافي الرقمي بعد الموافقة: ' + fmt(Number(tp.value || 0) * (1 - S.settings.commission / 100)); }
+
+/* ---------- الأحداث ---------- */
+const A = {
+  role(v) { ui.role = v; ui.actor = null; ui.tab = v === 'admin' ? 'overview' : v === 'customer' ? 'wallet' : 'home'; render(); },
+  exit() { ui.role = null; ui.actor = null; ui.last = null; render(); },
+  pick(v) { ui.actor = v; render(); },
+  tab(v) { ui.tab = v; render(); },
+  register() {
+    const n = $('#name').value;
+    const r = run(() => ui.role === 'customer' ? L.addCustomer(n) : L.addMerchant(n));
+    if (r && r.id) { ui.actor = r.id; render(); }
+  },
+  async pay() {
+    const code = $('#code').value.trim(), inv = S.invoices.find(i => i.code === code);
+    const p = await paymentProvider.charge({ amount: inv ? inv.amount : 0, invoiceCode: code, customerId: ui.actor });
+    if (!p.ok) return toast(p.error || 'تعذر إتمام الدفع');
+    const tx = run(() => L.payInvoice(code, ui.actor));
+    if (tx && tx.cashback !== undefined) { ui.tab = 'wallet'; render(); toast(`تم الدفع. الكاش باك ${fmt(tx.cashback)} دخل محفظتك`); }
+  },
+  mkinv() { const inv = run(() => L.createInvoice(ui.actor, $('#amt').value)); if (inv && inv.id) { ui.last = inv.id; render(); } },
+  topup() { if (run(() => L.requestTopup(ui.actor, $('#tp').value))) toast('انرسل الطلب للمدير'); },
+  mbank() { if (run(() => L.setMerchantBank(ui.actor, $('#mb_name').value, $('#mb_acc').value))) toast('انحفظ'); },
+  approve(v) { run(() => L.approveTopup(v)); },
+  reject(v) { run(() => L.rejectTopup(v)); },
+  addbank() {
+    const key = $('#b_key').value.trim();
+    const b = run(() => L.addBank({ name: $('#b_name').value, holder: $('#b_holder').value, number: $('#b_num').value, kind: $('#b_kind').value, hasKey: !!key }));
+    if (b && b.id && key) { try { localStorage.setItem('cb_key_' + b.id, key); } catch (e) { toast('تعذر حفظ المفتاح على هذا الجهاز'); } render(); }
+  },
+  linkbank(v) { if (run(() => L.linkBank(v))) toast('تم الربط (تجريبي). الاتصال الفعلي بالبنك يحتاج خادم.'); },
+  delbank(v) { run(() => L.removeBank(v)); try { localStorage.removeItem('cb_key_' + v); } catch (e) {} },
+  rates() { if (run(() => L.setRates($('#r_c').value, $('#r_k').value))) toast('انحفظت النسب'); },
+  askreset() { ui.confirmReset = true; render(); },
+  cancelreset() { ui.confirmReset = false; render(); },
+  doreset() { S = initial(); ui.confirmReset = false; save(); render(); toast('تم المسح'); }
+};
+document.addEventListener('click', e => { const el = e.target.closest('[data-act]'); if (el && A[el.dataset.act]) A[el.dataset.act](el.dataset.v); });
+document.addEventListener('input', e => {
+  if (e.target.id === 'code') $('#prev').innerHTML = previewHtml(e.target.value.trim());
+  if (e.target.id === 'tp') updNet();
+});
+render();
+</script>
+
+</body></html>
