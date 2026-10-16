@@ -66,6 +66,8 @@ input,select{display:block;width:100%;margin-top:4px;padding:10px;border:1px sol
 .tag{text-align:center;color:var(--mute);margin-bottom:22px}
 .pick{display:block;width:100%;text-align:right;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;font-weight:600;color:var(--ink);cursor:pointer}
 .mono{direction:ltr;unicode-bidi:plaintext;display:inline-block}
+.seg{display:flex;gap:6px;margin:6px 0 12px}.seg button{flex:1;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--mute);font-weight:700;cursor:pointer}.seg button.on{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
+.sub{color:var(--mute);font-size:.85rem;margin-top:6px}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .cphoto{display:block;width:100%;max-height:260px;object-fit:contain;background:#000;border-radius:8px;margin-bottom:8px}
 .filebtn{position:relative;overflow:hidden;cursor:pointer;font-size:1rem;text-align:center}
@@ -386,32 +388,91 @@ async function pushNow() {
   pushing = false;
   if (dirty && sync.st === 'on') schedulePush();
 }
+/* ---------- حسابات الدخول (Firebase Authentication) ---------- */
+const ADMIN_EMAIL = 'admin@cb.invalid';
+const MAIL_DOMAIN = '@cb.invalid';
+let fbdb = null, fbAuth = null, unsub = null;
+const auth = { ready: false, user: null, profile: null, profileErr: '', mode: 'login', busy: false, creating: false, fail: '' };
+const isAdmin = () => !!(auth.user && auth.user.email === ADMIN_EMAIL);
+const normPhone = s => {
+  let d = String(s || '').replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/\D/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  if (d.startsWith('218')) d = d.slice(3);
+  if (d.startsWith('0')) d = d.slice(1);
+  return /^\d{9}$/.test(d) ? '218' + d : '';
+};
+const emailOf = ph => ph + MAIL_DOMAIN;
+function authErr(e) {
+  const c = (e && e.code) || '';
+  if (c === 'auth/email-already-in-use') return 'هذا الرقم مسجّل من قبل. اضغط «دخول».';
+  if (['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found', 'auth/invalid-login-credentials'].includes(c)) return 'الرقم أو كلمة السر غير صحيحة';
+  if (c === 'auth/weak-password') return 'كلمة السر قصيرة (6 أحرف على الأقل)';
+  if (c === 'auth/operation-not-allowed' || c === 'auth/admin-restricted-operation') return 'فعّل Email/Password في Firebase Authentication أولاً';
+  if (c === 'auth/network-request-failed') return 'لا يوجد إنترنت أو الاتصال محجوب';
+  if (c === 'auth/too-many-requests') return 'محاولات كثيرة. انتظر قليلاً وجرّب.';
+  if (c === 'auth/invalid-email') return 'الرقم غير صالح';
+  return e && e.code ? fbErr(e) : (e && e.message) || 'حدث خطأ';
+}
+function stopSync() {
+  if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
+  fdb = null; rev = 0; dirty = false; clearTimeout(pushT);
+  setSync('off', 'غير متصل: سجّل الدخول');
+}
+async function startSync() {
+  if (fdb || !fbdb) return;
+  const ref = fbdb.collection('cashback').doc('state');
+  await fbdb.runTransaction(async tx => { const d = await tx.get(ref); if (!d.exists) tx.set(ref, { json: stripS(), rev: 1, t: Date.now() }); });
+  fdb = fbdb;
+  setSync('on', 'متصل بقاعدة البيانات');
+  syncPhotos();
+  await new Promise(res => {
+    let first = true; const done = () => { if (first) { first = false; res(); } };
+    unsub = ref.onSnapshot(d => {
+      if (d.exists && !d.metadata.hasPendingWrites) {
+        const x = d.data();
+        if (x.rev > rev && !dirty && !pushing) { adopt(x.json, x.rev); if (!first) softRender(); }
+      }
+      if (sync.st !== 'on') setSync('on', 'متصل بقاعدة البيانات');
+      done();
+    }, e => { setSync('err', fbErr(e)); done(); });
+  });
+}
+async function afterLogin(u) {
+  auth.user = u; auth.ready = true; auth.profile = null; auth.profileErr = '';
+  try {
+    if (u.email === ADMIN_EMAIL) auth.profile = { role: 'admin' };
+    else {
+      const d = await fbdb.collection('users').doc(u.uid).get();
+      if (d.exists) auth.profile = d.data(); else auth.profileErr = 'حسابك غير مكتمل. اتصل بالمدير.';
+    }
+    await startSync();
+    if (auth.profile && auth.profile.role !== 'admin') { ui.role = auth.profile.role; ui.actor = auth.profile.eid; }
+    ui.tab = auth.profile && auth.profile.role === 'admin' ? 'overview' : 'home';
+  } catch (e) { auth.profileErr = fbErr(e); setSync('err', fbErr(e)); }
+  render();
+}
 async function fbInit() {
   try {
-    if (!window.firebase) {
+    if (!window.firebase || !firebase.auth || !firebase.firestore) {
+      const v = '10.12.2';
       const srcs = [
-        ['https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-app-compat.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-firestore-compat.min.js'],
-        ['https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-app-compat.js', 'https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-firestore-compat.js']
+        ['app', 'firestore', 'auth'].map(n => `https://cdnjs.cloudflare.com/ajax/libs/firebase/${v}/firebase-${n}-compat.min.js`),
+        ['app', 'firestore', 'auth'].map(n => `https://cdn.jsdelivr.net/npm/firebase@${v}/firebase-${n}-compat.js`)
       ];
       let loaded = false;
-      for (const [a, b] of srcs) { try { await loadJs(a); await loadJs(b); if (window.firebase && firebase.firestore) { loaded = true; break; } } catch (e) {} }
+      for (const list of srcs) { try { for (const s of list) await loadJs(s); if (window.firebase && firebase.firestore && firebase.auth) { loaded = true; break; } } catch (e) {} }
       if (!loaded) throw { code: '', message: 'تعذر تحميل مكتبة Firebase' };
     }
     firebase.initializeApp(FB_CONFIG);
-    const db = firebase.firestore();
-    try { db.settings({ experimentalAutoDetectLongPolling: true }); } catch (e) {}
-    const ref = db.collection('cashback').doc('state');
-    await db.runTransaction(async tx => { const d = await tx.get(ref); if (!d.exists) tx.set(ref, { json: stripS(), rev: 1, t: Date.now() }); });
-    fdb = db;
-    setSync('on', 'متصل بقاعدة البيانات');
-    syncPhotos();
-    ref.onSnapshot(d => {
-      if (!d.exists || d.metadata.hasPendingWrites) return;
-      const x = d.data();
-      if (x.rev > rev && !dirty && !pushing) { adopt(x.json, x.rev); softRender(); }
-      if (sync.st !== 'on') setSync('on', 'متصل بقاعدة البيانات');
-    }, e => setSync('err', fbErr(e)));
-  } catch (e) { setSync('err', fbErr(e)); }
+    fbdb = firebase.firestore();
+    try { fbdb.settings({ experimentalAutoDetectLongPolling: true }); } catch (e) {}
+    fbAuth = firebase.auth();
+    fbAuth.onAuthStateChanged(async u => {
+      if (auth.creating) return;
+      if (!u) { auth.user = null; auth.profile = null; auth.ready = true; stopSync(); render(); return; }
+      await afterLogin(u);
+    });
+  } catch (e) { auth.ready = true; auth.fail = 'تعذر الاتصال بالخادم: ' + ((e && e.message) || 'غير معروف'); setSync('err', auth.fail); render(); }
 }
 const keyGet = id => { try { return localStorage.getItem('cb_key_' + id); } catch (e) { return null; } };
 
@@ -443,28 +504,34 @@ function shell(sub, tabs, body, center) {
   <nav class="tabs">${nav}</nav>`;
 }
 
-function home() {
+function noteHtml() { return auth.fail ? `<div class="note" style="margin-bottom:10px">${esc(auth.fail)}</div>` : ''; }
+function loadingHtml(msg, withExit) {
+  return `<div class="home"><div class="logo">CASH BACK</div><div class="tag">${esc(msg)}</div>${withExit ? '<button class="btn ghost" data-act="exit">تسجيل الخروج</button>' : ''}</div>`;
+}
+function authHtml() {
+  const su = auth.mode === 'signup', off = auth.busy ? 'disabled' : '';
   return `<div class="home">
     <div class="logo">CASH BACK</div>
     <div class="tag">كاش باك على كل بيعة</div>
     <div class="ver-line">الإصدار 2.0 • تحديث أكتوبر 2026</div>
-    <button class="btn" data-act="role" data-v="customer">أنا زبون</button>
-    <button class="btn alt" data-act="role" data-v="merchant">أنا تاجر</button>
-    <button class="btn ghost" data-act="role" data-v="admin">دخول المدير</button>
-    <div class="note" style="margin-top:18px">نسخة تجريبية. الدفع والبنوك محاكاة، والبيانات محفوظة على هذا الجهاز فقط.</div>
+    <div class="seg"><button class="${su ? '' : 'on'}" data-act="authmode" data-v="login">دخول</button><button class="${su ? 'on' : ''}" data-act="authmode" data-v="signup">حساب جديد</button></div>
+    ${noteHtml()}
+    <div class="card">
+      ${su ? `<label for="a_name" style="margin-top:0">الاسم (أو اسم المحل للتاجر)</label><input id="a_name" autocomplete="name">` : ''}
+      <label for="a_phone" ${su ? '' : 'style="margin-top:0"'}>رقم الهاتف</label><input id="a_phone" type="tel" inputmode="tel" dir="ltr" placeholder="09XXXXXXXX" autocomplete="tel">
+      <label for="a_pw">كلمة السر (6 أحرف أو أكثر)</label><input id="a_pw" type="password" dir="ltr" autocomplete="${su ? 'new-password' : 'current-password'}">
+      ${su ? `<label for="reg_cat">نوع النشاط (للتجار فقط)</label><select id="reg_cat">${CATS.map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select>
+        <button class="btn" data-act="signup" data-v="customer" ${off}>إنشاء حساب زبون</button>
+        <button class="btn alt" data-act="signup" data-v="merchant" ${off}>إنشاء حساب تاجر</button>
+        <p class="sub">حساب التاجر يظهر للزبائن بعد موافقة المدير.</p>` : `<button class="btn" data-act="login" ${off}>دخول</button>`}
+    </div>
+    <div class="note" style="margin-top:14px">نسخة تجريبية. الدفع والبنوك محاكاة.</div>
   </div>`;
 }
-
-function pick() {
-  const list = ui.role === 'customer' ? S.customers : S.merchants;
-  return `<main style="padding-top:24px">
-    <h2>${ui.role === 'customer' ? 'اختر حسابك' : 'اختر محلك'}</h2>
-    ${list.map(x => `<button class="pick" data-act="pick" data-v="${x.id}">${esc(x.name)}</button>`).join('')}
-    ${ui.role === 'cashier' ? '' : `<div class="card"><label for="name" style="margin-top:0">${ui.role === 'customer' ? 'تسجيل زبون جديد' : 'تسجيل تاجر جديد'}</label>
-      <input id="name" placeholder="الاسم" autocomplete="off">
-      ${ui.role === 'merchant' ? `<label for="reg_cat">نوع النشاط</label><select id="reg_cat">${CATS.map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select>` : ''}
-      <button class="btn" data-act="register">تسجيل</button></div>`}
-    <button class="btn ghost" data-act="exit">رجوع</button></main>`;
+function adminLogin() {
+  return `<div class="home"><div class="logo">CASH BACK</div><div class="tag">دخول المدير</div>${noteHtml()}
+    <div class="card"><label for="ad_pw" style="margin-top:0">كلمة سر المدير</label><input id="ad_pw" type="password" dir="ltr" autocomplete="current-password">
+    <button class="btn" data-act="adminlogin" ${auth.busy ? 'disabled' : ''}>دخول</button></div></div>`;
 }
 
 function previewHtml(code) {
@@ -650,22 +717,85 @@ function admin() {
 function render() {
   S.merchants.forEach(m => { if (!CATS.some(c => c[0] === m.cat)) m.cat = 'shops'; });
   const app = $('#app');
-  app.innerHTML = !ui.role ? home() : ui.role === 'admin' ? admin() : !ui.actor ? pick() : ui.role === 'customer' ? customer() : merchant();
+  const route = location.hash === '#admin' ? 'admin' : 'main';
+  const role = auth.profile && auth.profile.role;
+  let html;
+  if (!auth.ready) html = loadingHtml('جاري التحميل...');
+  else if (route === 'admin') {
+    if (!isAdmin()) html = adminLogin();
+    else { if (!['overview', 'merchants', 'requests', 'banks', 'settings'].includes(ui.tab)) ui.tab = 'overview'; html = admin(); }
+  }
+  else if (!auth.user) html = authHtml();
+  else if (!auth.profile) html = loadingHtml(auth.profileErr || 'جاري تحميل حسابك...', true);
+  else if (role === 'admin') { location.hash = '#admin'; return; }
+  else if (role === 'customer' && S.customers.some(c => c.id === ui.actor)) { if (!['home', 'stores', 'wallet', 'me', 'claim'].includes(ui.tab)) ui.tab = 'home'; html = customer(); }
+  else if (role === 'merchant' && S.merchants.some(m => m.id === ui.actor)) { if (!['home', 'topup', 'bank'].includes(ui.tab)) ui.tab = 'home'; html = merchant(); }
+  else html = loadingHtml('جاري مزامنة حسابك...', true);
+  app.innerHTML = html;
   const tp = $('#tp'); if (tp) updNet();
   fetchPhotos();
 }
 function updNet() { const tp = $('#tp'), n = $('#tpnet'); if (tp && n) n.textContent = 'صافي الرقمي بعد الموافقة: ' + fmt(Number(tp.value || 0) * (1 - S.settings.commission / 100)); }
 
 /* ---------- الأحداث ---------- */
+function busy(on) { auth.busy = on; document.querySelectorAll('#app .btn').forEach(b => { b.disabled = on; }); }
 const A = {
-  role(v) { ui.role = v; ui.actor = null; ui.last = null; ui.tab = v === 'admin' ? 'overview' : v === 'customer' ? 'home' : 'home'; render(); },
-  exit() { ui.role = null; ui.actor = null; ui.last = null; ui.claimPhoto = null; ui.claimMid = null; ui.q = ''; ui.cat = 'all'; render(); },
-  pick(v) { ui.actor = v; render(); },
   tab(v) { ui.tab = v; render(); },
-  register() {
-    const n = $('#name').value;
-    const r = run(() => ui.role === 'customer' ? L.addCustomer(n) : L.addMerchant(n, $('#reg_cat') ? $('#reg_cat').value : 'shops'));
-    if (r && r.id) { ui.actor = r.id; render(); }
+  authmode(v) { auth.mode = v; auth.fail = ''; render(); },
+  async exit() {
+    ui.last = null; ui.claimPhoto = null; ui.claimMid = null; ui.q = ''; ui.cat = 'all'; ui.role = null; ui.actor = null; auth.profile = null; auth.fail = ''; auth.mode = 'login';
+    try { if (fdb && dirty) { clearTimeout(pushT); await pushNow(); } if (fbAuth) await fbAuth.signOut(); else render(); } catch (e) { render(); }
+  },
+  async login() {
+    if (auth.busy) return;
+    const ph = normPhone($('#a_phone').value), pw = $('#a_pw').value;
+    if (!ph) return toast('اكتب رقم هاتف صحيح (مثال 0912345678)');
+    if (!pw) return toast('اكتب كلمة السر');
+    if (!fbAuth) return toast(auth.fail || 'جاري الاتصال... حاول بعد ثواني');
+    busy(true);
+    try { await fbAuth.signInWithEmailAndPassword(emailOf(ph), pw); } catch (e) { toast(authErr(e)); }
+    busy(false);
+  },
+  async adminlogin() {
+    if (auth.busy) return;
+    const pw = $('#ad_pw').value;
+    if (!pw) return toast('اكتب كلمة السر');
+    if (!fbAuth) return toast(auth.fail || 'جاري الاتصال... حاول بعد ثواني');
+    busy(true);
+    try { await fbAuth.signInWithEmailAndPassword(ADMIN_EMAIL, pw); } catch (e) { toast(authErr(e)); }
+    busy(false);
+  },
+  async signup(role) {
+    if (auth.busy) return;
+    const name = $('#a_name').value.trim(), ph = normPhone($('#a_phone').value), pw = $('#a_pw').value, cat = $('#reg_cat') ? $('#reg_cat').value : 'shops';
+    if (!name) return toast(role === 'merchant' ? 'اكتب اسم المحل' : 'اكتب اسمك');
+    if (!ph) return toast('اكتب رقم هاتف صحيح (مثال 0912345678)');
+    if (pw.length < 6) return toast('كلمة السر قصيرة (6 أحرف على الأقل)');
+    if (!fbAuth || !fbdb) return toast(auth.fail || 'جاري الاتصال... حاول بعد ثواني');
+    busy(true); auth.creating = true;
+    let cred = null;
+    try {
+      cred = await fbAuth.createUserWithEmailAndPassword(emailOf(ph), pw);
+      const ref = fbdb.collection('cashback').doc('state'), uref = fbdb.collection('users').doc(cred.user.uid);
+      const out = await fbdb.runTransaction(async tx => {
+        const d = await tx.get(ref), cur = d.exists ? d.data() : { json: null, rev: 0 };
+        const prev = S; let ent, json;
+        S = cur.json ? JSON.parse(cur.json) : initial(); norm();
+        try { ent = role === 'customer' ? L.addCustomer(name) : L.addMerchant(name, cat); json = stripS(); } finally { S = prev; }
+        tx.set(ref, { json, rev: cur.rev + 1, t: Date.now() });
+        tx.set(uref, { role, eid: ent.id, name });
+        return { json, rev: cur.rev + 1 };
+      });
+      adopt(out.json, out.rev);
+      auth.creating = false;
+      await afterLogin(cred.user);
+      toast(role === 'merchant' ? 'تم التسجيل. حسابك بانتظار موافقة المدير.' : 'تم إنشاء حسابك');
+    } catch (e) {
+      auth.creating = false;
+      if (cred && cred.user) { try { await cred.user.delete(); } catch (x) { try { await fbAuth.signOut(); } catch (y) {} } }
+      toast(authErr(e));
+    }
+    auth.creating = false; busy(false);
   },
   topup() { if (run(() => L.requestTopup(ui.actor, $('#tp').value))) toast('انرسل الطلب للمدير'); },
   mbank() { if (run(() => L.setMerchantBank(ui.actor, $('#mb_name').value, $('#mb_acc').value, $('#mb_cat').value))) toast('انحفظ'); },
@@ -735,6 +865,12 @@ document.addEventListener('input', e => {
   if (e.target.id === 'q') { ui.q = e.target.value; const r = $('#res'); if (r) r.innerHTML = resultsHtml(); }
 });
 document.addEventListener('focusout', () => { if (deferRender) setTimeout(() => { const a = document.activeElement; if (deferRender && !(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))) { deferRender = false; render(); } }, 250); });
+window.addEventListener('hashchange', () => { auth.fail = ''; render(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (e.target.id === 'ad_pw') A.adminlogin();
+  else if (e.target.id === 'a_pw' && auth.mode === 'login') A.login();
+});
 render();
 fbInit();
 </script>
