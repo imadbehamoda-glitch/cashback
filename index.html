@@ -340,6 +340,16 @@ const L = {
     S.settles.unshift(t); log(mid, 'طلب سحب', `${no} ${sum}`);
     notify('admin', `طلب سحب ${no}: ${m.name} • ${sum} د.ل`); return t;
   },
+  // تحويل الكاش باك المستلم إلى محفظة الشحن (رصيد تدفع منه العمولات) بدل سحبه للبنك
+  cbToWallet(mid) {
+    const m = find(S.merchants, mid, 'تاجر غير موجود');
+    const items = S.cbpays.filter(x => x.mid === mid && x.status === 'done' && !x.sid);
+    const sum = r2(items.reduce((a, x) => a + x.amount, 0));
+    if (!items.length || sum <= 0) throw new Error('ما عندك كاش باك مستلم للتحويل');
+    items.forEach(x => { x.sid = 'W' + Date.now(); });
+    m.cbIn = Math.max(0, r2((m.cbIn || 0) - sum)); m.digital = r2(m.digital + sum);
+    log(mid, 'تحويل كاش باك لمحفظة الشحن', sum); notify(mid, `تم تحويل ${sum} د.ل من الكاش باك المستلم إلى محفظتك. رصيدك الآن ${m.digital} د.ل`); return sum;
+  },
   approveSettle(id, ref) {
     const t = find(S.settles, id, 'الطلب غير موجود');
     if (t.status !== 'pending') throw new Error('الطلب تمت معالجته');
@@ -1112,6 +1122,7 @@ function settleTab(m) {
   const open = S.settles.find(x => x.mid === m.id && x.status === 'pending');
   return `<div class="card hero"><div class="k">كاش باك مستلم من الزبائن (رصيد منفصل)</div><div class="big">${fmt(bal)}</div></div>
     <div class="note">هذا رصيد منفصل عن محفظة الشحن. كل ما زبون يدفع عندك بكاش باك ينزل هنا. تطلب سحبه من الشركة وتستلمه في حسابك البنكي مع كشف الفواتير.</div>
+    ${bal >= 0.01 ? `<div class="card"><h2>تحويل لمحفظتي</h2><p class="k">حوّل الكاش باك المستلم لمحفظة الشحن فوراً، وتدفع منه عمولات مبيعاتك بدل ما تشحن من البنك.</p><button class="btn alt" data-act="cb2w">حوّل ${fmt(bal)} لمحفظتي</button></div>` : ''}
     ${open ? `<div class="card">${line('سحب قيد المراجعة #' + esc(open.no), fmt(open.amount), 'b')}<button class="btn ghost" style="margin-top:8px" data-act="shareset" data-v="${open.id}">مشاركة الكشف</button></div>`
       : `<div class="card"><h2>طلب سحب</h2><p class="k">أقل مبلغ: <b>${min} د.ل</b>. بعد الطلب يتجهز كشف بالفواتير، والمدير يحوّل المبلغ لحسابك.</p>
       <label for="sl_bank">اسم المصرف</label><input id="sl_bank" value="${esc(m.payBank || 'مصرف شمال أفريقيا')}">
@@ -1457,6 +1468,7 @@ const A = {
   delbank(v) { run(() => L.removeBank(v)); try { localStorage.removeItem('cb_key_' + v); } catch (e) {} },
   rates() { if (run(() => { L.setRates($('#r_c').value, $('#r_k').value); L.setClaimHours($('#r_h').value); L.setAutoApprove($('#r_a').value === '1'); L.setLimits($('#r_mx').value, $('#r_md').value); L.setMinTopup($('#r_min').value); L.setMinSettle($('#r_ms').value); })) toast('انحفظت الإعدادات'); },
   cbpay() { const mid = $('#cb_mid') ? $('#cb_mid').value : '', amt = $('#cb_amt') ? $('#cb_amt').value : ''; const mm = S.merchants.find(x => x.id === mid); if (!mm) return toast('اختر المحل'); if (!confirm('تأكيد دفع ' + amt + ' د.ل من كاش باك عند ' + mm.name + '؟ العملية فورية ولا ترجع.')) return; if (run(() => L.requestCbPay(ui.actor, mid, amt))) toast('تم الدفع بالكاش باك'); },
+  cb2w() { const m = S.merchants.find(x => x.id === ui.actor); const b = m ? r2(m.cbIn || 0) : 0; if (!confirm('تحويل ' + b + ' د.ل من الكاش باك المستلم إلى محفظة الشحن؟ بعدها ما ترجع تسحبها للبنك.')) return; if (run(() => L.cbToWallet(ui.actor))) toast('تم التحويل لمحفظتك'); },
   cbcancel(v) { if (run(() => L.cancelCbPay(v, ui.actor))) toast('تم إلغاء الطلب'); },
   cbok(v) { const t = run(() => L.reviewCbPay(v, true, ui.actor)); if (t) toast('تم القبول. نزل في كاش باك المستلم'); },
   cbno(v) { run(() => L.reviewCbPay(v, false, ui.actor)); },
