@@ -281,9 +281,13 @@ const L = {
     if (m.status !== 'active') throw new Error('هذا المحل غير مفعّل');
     if (amount > r2(cbOf(c, mid) + freeBal(c))) throw new Error('رصيدك عند ' + m.name + ' هو ' + r2(cbOf(c, mid) + freeBal(c)) + ' د.ل فقط. كاش باك كل محل يُصرف في نفس المحل');
     if (S.cbpays.some(x => x.cid === cid && cbLive(x))) throw new Error('عندك طلب دفع بانتظار التاجر');
-    const t = { id: uid('b'), cid, mid, amount, status: 'pending', at: Date.now() };
-    S.cbpays.unshift(t); log(cid, 'طلب دفع بكاش باك', `${m.name} ${amount}`);
-    notify(mid, `طلب دفع بكاش باك: ${c.name} • ${amount} د.ل. افتح الرئيسية للقبول`); return t;
+    // دفع فوري بدون موافقة التاجر: ينخصم من رصيد الزبون عند هذا المحل ويصير كاش باك مستلم للتاجر
+    cbAdd(c, mid, -Math.min(cbOf(c, mid), amount));
+    c.wallet = r2(c.wallet - amount); m.cbIn = r2((m.cbIn || 0) + amount);
+    const now = Date.now(), t = { id: uid('b'), cid, mid, amount, status: 'done', at: now, done: now };
+    S.cbpays.unshift(t); log(cid, 'دفع بكاش باك', `${m.name} ${amount}`);
+    notify(mid, `استلمت دفعة كاش باك ${amount} د.ل من ${c.name}`);
+    notify(cid, `تم الدفع ${amount} د.ل من كاش باك عند ${m.name}. رصيدك ${c.wallet} د.ل`); return t;
   },
   cancelCbPay(id, cid) {
     const t = find(S.cbpays, id, 'الطلب غير موجود');
@@ -1086,11 +1090,11 @@ function cbPayCard(c) {
   const sts = { rejected: 'رفضه التاجر', canceled: 'ألغيته', pending: 'انتهت مدته' };
   const last = S.cbpays.filter(x => x.cid === c.id && !cbLive(x) && x.status !== 'done').slice(0, 2);
   return `<div class="card"><h2>ادفع بالكاش باك عند محل</h2>
-    <p class="k">كاش باك كل محل تصرفه في نفس المحل فقط. اختر المحل والمبلغ، والتاجر يؤكد من تطبيقه.</p>
+    <p class="k">كاش باك كل محل تصرفه في نفس المحل فقط. اختر المحل والمبلغ ويتم الدفع فوراً، والتاجر يوصله إشعار. وريه الشاشة عند الدفع.</p>
     ${open ? `${line('بانتظار تأكيد ' + esc((S.merchants.find(m => m.id === open.mid) || {}).name), fmt(open.amount), 'b')}<p class="k">ينتهي الطلب بعد ${S.settings.cbpayMin || 10} دقيقة.</p><button class="btn ghost" data-act="cbcancel" data-v="${open.id}">إلغاء الطلب</button>`
       : (() => { const ms = liveM().filter(m => cbOf(c, m.id) + freeBal(c) >= 0.01); return ms.length ? `<label for="cb_mid">المحل</label><select id="cb_mid">${ms.map(m => `<option value="${m.id}">${esc(m.name)} (متاح ${fmt(r2(cbOf(c, m.id) + freeBal(c)))})</option>`).join('')}</select>
          <label for="cb_amt">المبلغ (د.ل)</label><input id="cb_amt" inputmode="decimal">
-         <button class="btn" data-act="cbpay">أرسل الطلب للتاجر</button>` : '<p class="k">ما عندك رصيد تصرفه الحين. اشتر من أي محل وصوّر فاتورتك، ويجيك كاش باك تصرفه في نفس المحل.</p>'; })()}
+         <button class="btn" data-act="cbpay">ادفع الآن</button>` : '<p class="k">ما عندك رصيد تصرفه الحين. اشتر من أي محل وصوّر فاتورتك، ويجيك كاش باك تصرفه في نفس المحل.</p>'; })()}
     ${last.map(x => `<p class="k">طلب ${fmt(x.amount)} ${sts[x.status] || ''}</p>`).join('')}
     ${hist.map(x => `<div class="card" style="padding:10px">${line(esc((S.merchants.find(m => m.id === x.mid) || {}).name) + ' • ' + hm(x.done || x.at), '-' + fmt(x.amount), 'b')}</div>`).join('')}</div>`;
 }
@@ -1452,7 +1456,7 @@ const A = {
   linkbank(v) { if (run(() => L.linkBank(v))) toast('تم الربط (تجريبي). الاتصال الفعلي بالبنك يحتاج خادم.'); },
   delbank(v) { run(() => L.removeBank(v)); try { localStorage.removeItem('cb_key_' + v); } catch (e) {} },
   rates() { if (run(() => { L.setRates($('#r_c').value, $('#r_k').value); L.setClaimHours($('#r_h').value); L.setAutoApprove($('#r_a').value === '1'); L.setLimits($('#r_mx').value, $('#r_md').value); L.setMinTopup($('#r_min').value); L.setMinSettle($('#r_ms').value); })) toast('انحفظت الإعدادات'); },
-  cbpay() { const mid = $('#cb_mid') ? $('#cb_mid').value : '', amt = $('#cb_amt') ? $('#cb_amt').value : ''; if (run(() => L.requestCbPay(ui.actor, mid, amt))) toast('انرسل الطلب للتاجر'); },
+  cbpay() { const mid = $('#cb_mid') ? $('#cb_mid').value : '', amt = $('#cb_amt') ? $('#cb_amt').value : ''; const mm = S.merchants.find(x => x.id === mid); if (!mm) return toast('اختر المحل'); if (!confirm('تأكيد دفع ' + amt + ' د.ل من كاش باك عند ' + mm.name + '؟ العملية فورية ولا ترجع.')) return; if (run(() => L.requestCbPay(ui.actor, mid, amt))) toast('تم الدفع بالكاش باك'); },
   cbcancel(v) { if (run(() => L.cancelCbPay(v, ui.actor))) toast('تم إلغاء الطلب'); },
   cbok(v) { const t = run(() => L.reviewCbPay(v, true, ui.actor)); if (t) toast('تم القبول. نزل في كاش باك المستلم'); },
   cbno(v) { run(() => L.reviewCbPay(v, false, ui.actor)); },
