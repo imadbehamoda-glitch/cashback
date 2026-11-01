@@ -219,7 +219,16 @@ const initial = () => ({
   topups: [], invoices: [], txns: [], audit: [], banks: [], claims: [], cbpays: [], settles: []
 });
 
-const normPhone = p => { let d = String(p || '').replace(/[\u0660-\u0669]/g, x => x.charCodeAt(0) - 1632).replace(/\D/g, ''); if (d.startsWith('00218')) d = '0' + d.slice(5); else if (d.startsWith('218')) d = '0' + d.slice(3); else if (d.length === 9 && d[0] === '9') d = '0' + d; return /^09[24]\d{7}$/.test(d) ? d : ''; };
+const normPhone = p => {
+  const raw = String(p || '').trim().replace(/[\u0660-\u0669]/g, x => (x.charCodeAt(0) - 1632));
+  let d = raw.replace(/\D/g, ''); const plus = raw.startsWith('+') || d.startsWith('00');
+  if (d.startsWith('00')) d = d.slice(2);
+  if (/^218(9[1-4]\d{7})$/.test(d)) return '0' + d.slice(3);              // ليبي بصيغة دولية
+  if (!plus && /^09[1-4]\d{7}$/.test(d)) return d;                        // ليبي محلي
+  if (!plus && /^9[1-4]\d{7}$/.test(d)) return '0' + d;
+  if (d.length < 8 || d.length > 15) return '';                             // أي رقم آخر (جزائري أو غيره)
+  return plus ? '+' + d : d;
+};
 const MGR_PHONE = '0946563895';
 const getRef = () => { try { return localStorage.getItem('cb_ref') || ''; } catch (e) { return ''; } };
 try { const q = new URLSearchParams(location.search).get('ref'); if (q && /^[\w-]{3,40}$/.test(q)) localStorage.setItem('cb_ref', q); } catch (e) {}
@@ -232,7 +241,7 @@ const L = {
   addMerchant(name, cat, phone, id) {
     if (!name.trim()) throw new Error('اكتب اسم المحل');
     const ph = normPhone(phone);
-    if (!ph) throw new Error('اكتب رقم ليبيانا صحيح (يبدأ بـ 092 أو 094، مثال 0921234567)');
+    if (!ph) throw new Error('اكتب رقم هاتف صحيح (مثال 0921234567 أو +213555123456)');
     if (S.merchants.some(x => x.phone === ph)) throw new Error('رقم الهاتف مستخدم لمحل آخر');
     const m = { id: id || uid('m'), name: name.trim(), phone: ph, cat: cat || 'shops', status: 'pending', barPrefix: '', barLen: 0, digital: 0, funded: 0, real: 0, bank: 0, bankName: '', bankAccount: '' };
     S.merchants.push(m); log('system', 'تسجيل تاجر', m.name); notify('admin', 'تاجر جديد بانتظار التفعيل: ' + m.name); return m;
@@ -240,7 +249,7 @@ const L = {
   addCustomer(name, phone, id, refId) {
     if (!name.trim()) throw new Error('اكتب الاسم');
     const ph = normPhone(phone);
-    if (!ph) throw new Error('اكتب رقم ليبيانا صحيح (يبدأ بـ 092 أو 094، مثال 0921234567)');
+    if (!ph) throw new Error('اكتب رقم هاتف صحيح (مثال 0921234567 أو +213555123456)');
     if (S.customers.some(x => x.phone === ph)) throw new Error('رقم الهاتف مستخدم لحساب آخر');
     const c = { id: id || uid('c'), name: name.trim(), phone: ph, wallet: 0 };
     if (refId && refId !== c.id && S.customers.some(x => x.id === refId)) c.ref = refId;
@@ -792,7 +801,7 @@ async function startSync() {
         const x = d.data();
         if (x.rev > rev && !dirty && !pushing) {
           const b0 = unreadCount(meId()); adopt(x.json, x.rev);
-          if (!first && unreadCount(meId()) > b0) { const nn = (S.notes || []).find(n => n.to === meId() && !n.read); if (nn) { toast('🔔 ' + nn.text); ding(); } }
+          if (!first && unreadCount(meId()) > b0) { const nn = (S.notes || []).find(n => n.to === meId() && !n.read); if (nn) { toast('🔔 ' + nn.text); ding(); sysNotify(nn.text); } }
           if (!first) softRender();
         }
       }
@@ -858,6 +867,14 @@ let pendingRestore = null;
 const delCard = () => `<div class="card"><h2>حذف حسابي</h2>` + (ui.confirmDel ? `<p class="err">سيتم حذف حسابك وبياناتك نهائياً ولا يمكن التراجع.</p>${hasPw(auth.user) ? '<label for="del_pw">كلمة السر</label><input id="del_pw" type="password" autocomplete="current-password" dir="ltr">' : '<p class="k">سيُطلب منك تأكيد دخولك بحسابك قبل الحذف.</p>'}<label for="del_word">اكتب «حذف» للتأكيد</label><input id="del_word" autocomplete="off"><div class="pair"><button class="btn danger" data-act="dodel">احذف حسابي</button><button class="btn ghost" data-act="canceldel">إلغاء</button></div>` : `<p class="k">حذف حسابك وبياناتك نهائياً. لازم رصيدك صفر وما يكون عندك طلبات معلّقة.</p><button class="btn danger" data-act="askdel">حذف حسابي</button>`) + `</div>`;
 const ui = { confirmDel: false, role: null, actor: null, tab: '', last: null, confirmReset: false, confirmRestore: false, claimPhoto: null, q: '', cat: 'all', claimMid: null, rp: '7' };
 let audioCtx = null;
+const ntfOn = () => { try { return localStorage.getItem('cb_ntf') === '1' && 'Notification' in window && Notification.permission === 'granted'; } catch (e) { return false; } };
+let swReg = null;
+try { if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').then(r => { swReg = r; }).catch(() => {}); } catch (e) {}
+function sysNotify(text, force) {
+  if (!ntfOn() || (!force && !document.hidden)) return;
+  try { const o = { body: text, tag: 'cb-note', renotify: true, dir: 'rtl', lang: 'ar', vibrate: [150, 70, 150] };
+    if (swReg && swReg.showNotification) swReg.showNotification('CASH BACK', o); else new Notification('CASH BACK', o); } catch (e) {}
+}
 const soundOn = () => { try { return localStorage.getItem('cb_snd') !== '0'; } catch (e) { return true; } };
 function unlockAudio() { try { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch (e) {} }
 ['touchstart', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, unlockAudio, { passive: true }));
@@ -880,7 +897,8 @@ const inviteCard = c => { const b = S.settings.refBonus || 0; if (!b) return '';
   return `<div class="card"><h2>ادعُ صاحبك واربح</h2><p class="k">شارك رابطك. كي صاحبك يسجل ويشتري أول مرة (من ${S.settings.refMin || 0} د.ل)، ينزل لكل واحد منكم <b>${b} د.ل</b> في المحفظة.</p>
   ${line('اللي سجلوا برابطك', n)}${line('مكافآت ربحتها', fmt(c.refEarn || 0), 'pos')}
   <button class="btn" data-act="invite">شارك رابط الدعوة</button></div>`; };
-const sndRow = () => `<div class="rw"><div><div class="t">🔔 صوت الإشعارات</div><div class="d">يرن التطبيق عند وصول إشعار جديد وهو مفتوح. <button data-act="sndtest" style="background:none;border:0;padding:0;font:inherit;color:var(--brand);font-weight:800;cursor:pointer">جرّب الصوت</button></div></div><div><button class="sw ${soundOn() ? 'on' : ''}" data-act="snd" role="switch" aria-checked="${soundOn()}" aria-label="صوت الإشعارات"></button></div></div>`;
+const sndRow = () => `<div class="rw"><div><div class="t">🔔 صوت الإشعارات</div><div class="d">يرن التطبيق عند وصول إشعار جديد وهو مفتوح. <button data-act="sndtest" style="background:none;border:0;padding:0;font:inherit;color:var(--brand);font-weight:800;cursor:pointer">جرّب الصوت</button></div></div><div><button class="sw ${soundOn() ? 'on' : ''}" data-act="snd" role="switch" aria-checked="${soundOn()}" aria-label="صوت الإشعارات"></button></div></div>`
+  + `<div class="rw"><div><div class="t">📲 تنبيهات النظام</div><div class="d">يوصلك تنبيه على الشاشة لما تجيك عملية وانت في تطبيق ثاني. ما يخدم لو قفلت التطبيق تماماً. <button data-act="ntftest" style="background:none;border:0;padding:0;font:inherit;color:var(--brand);font-weight:800;cursor:pointer">جرّب</button></div></div><div><button class="sw ${ntfOn() ? 'on' : ''}" data-act="ntf" role="switch" aria-checked="${ntfOn()}" aria-label="تنبيهات النظام"></button></div></div>`;
 const sndCard = () => `<div class="sec2"><h4>الإشعارات</h4>${sndRow()}</div>`;
 let toastT;
 function toast(msg) {
@@ -919,8 +937,8 @@ function repairHtml(role) {
   const mer = role === 'merchant';
   return `<div class="home"><div class="logo">CASH BACK</div>
     <div class="card" style="width:100%;text-align:right"><h2>أعد تفعيل حسابك</h2>
-    <p class="k">بيانات حسابك انمسحت (تم مسح البيانات). اكتب رقم ليبيانا واضغط الزر لإعادة إنشاء ${mer ? 'محلك' : 'حسابك'}. الرصيد القديم ما يرجع.${mer ? ' الحساب يرجع بانتظار موافقة المدير.' : ''}</p>
-    <label for="rp_phone">رقم ليبيانا (092 أو 094)</label><input id="rp_phone" type="tel" inputmode="tel" dir="ltr" placeholder="0921234567" autocomplete="tel">
+    <p class="k">بيانات حسابك انمسحت (تم مسح البيانات). اكتب رقم هاتفك واضغط الزر لإعادة إنشاء ${mer ? 'محلك' : 'حسابك'}. الرصيد القديم ما يرجع.${mer ? ' الحساب يرجع بانتظار موافقة المدير.' : ''}</p>
+    <label for="rp_phone">رقم الهاتف</label><input id="rp_phone" type="tel" inputmode="tel" dir="ltr" placeholder="0921234567" autocomplete="tel">
     <button class="btn" data-act="repair">إعادة إنشاء الحساب</button></div>
     <button class="btn ghost" data-act="exit">تسجيل الخروج</button></div>`;
 }
@@ -939,7 +957,7 @@ function completeHtml() {
   return `<div class="home">${head}<h2 style="text-align:center;margin:0 0 6px">${mer ? 'إكمال حساب التاجر' : 'إكمال حساب الزبون'}</h2>${noteHtml()}
     <div class="card"><p class="k" style="margin-top:0">تم تأكيد حسابك. باقي بيانات بسيطة:</p>
       <label for="a_name">${mer ? 'اسم المحل' : 'الاسم'}</label><input id="a_name" autocomplete="name" value="${mer ? '' : esc(auth.pend ? auth.pend.name : '')}">
-      <label for="a_phone">رقم ليبيانا (092 أو 094)</label><input id="a_phone" type="tel" inputmode="tel" dir="ltr" placeholder="0921234567" autocomplete="tel">
+      <label for="a_phone">رقم الهاتف</label><input id="a_phone" type="tel" inputmode="tel" dir="ltr" placeholder="0921234567" autocomplete="tel">
       ${mer ? `<label for="reg_cat">نوع النشاط</label><select id="reg_cat">${CATS.map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select>` : ''}
       <button class="btn ${mer ? 'alt' : ''}" data-act="socialfinish" ${off}>إنشاء حساب ${mer ? 'تاجر' : 'زبون'}</button>
       ${mer ? '<p class="sub">حساب التاجر يظهر للزبائن بعد موافقة المدير.</p>' : ''}
@@ -959,7 +977,7 @@ function authHtml() {
     <div class="seg"><button class="${su ? '' : 'on'}" data-act="authmode" data-v="login">دخول</button><button class="${su ? 'on' : ''}" data-act="authmode" data-v="signup">حساب جديد</button></div>
     ${noteHtml()}
     <div class="card">
-      ${su ? `<label for="a_name" style="margin-top:0">${mer ? 'اسم المحل' : 'الاسم'}</label><input id="a_name" autocomplete="name">${'<label for="a_phone">رقم ليبيانا (092 أو 094)</label><input id="a_phone" type="tel" inputmode="tel" dir="ltr" placeholder="0921234567" autocomplete="tel">'}` : ''}
+      ${su ? `<label for="a_name" style="margin-top:0">${mer ? 'اسم المحل' : 'الاسم'}</label><input id="a_name" autocomplete="name">${'<label for="a_phone">رقم الهاتف</label><input id="a_phone" type="tel" inputmode="tel" dir="ltr" placeholder="0921234567" autocomplete="tel">'}` : ''}
       <label for="a_email" ${su ? '' : 'style="margin-top:0"'}>الإيميل</label><input id="a_email" type="email" inputmode="email" dir="ltr" placeholder="name@gmail.com" autocomplete="email" autocapitalize="none" spellcheck="false">
       <label for="a_pw">كلمة السر (6 أحرف أو أكثر)</label><input id="a_pw" type="password" dir="ltr" autocomplete="${su ? 'new-password' : 'current-password'}">
       ${su ? `${mer ? `<label for="reg_cat">نوع النشاط</label><select id="reg_cat">${CATS.map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select>` : ''}
@@ -1268,7 +1286,7 @@ function admin() {
         <div class="pair"><button class="btn" data-act="approve" data-v="${t.id}">موافقة</button><button class="btn danger" data-act="reject" data-v="${t.id}">رفض</button></div></div>`;
     }).join('') : '<p class="k">ما فيش طلبات شحن جديدة.</p>';
     if (ppay.length) body += `<h3>تحويل رصيد للزبائن (${ppay.length})</h3>` + (ppay.length ? ppay.map(t => { const c = S.customers.find(x => x.id === t.cid); return `<div class="card"><h2>${esc(c && c.name)} • ${fmt(t.amount)}</h2>
-        ${line('حوّل رصيد ليبيانا لرقم', '<span class="mono" dir="ltr">' + esc(t.phone || '-') + '</span>', 'b')}
+        ${line('حوّل الرصيد لرقم', '<span class="mono" dir="ltr">' + esc(t.phone || '-') + '</span>', 'b')}
         <p class="k">حوّل ${fmt(t.amount)} من رقمك ${MGR_PHONE} للرقم أعلاه، وبعدها اضغط تم التحويل.</p>
         <div class="pair"><button class="btn" data-act="okpay" data-v="${t.id}">تم التحويل</button><button class="btn danger" data-act="nopay" data-v="${t.id}">رفض</button></div></div>`; }).join('') : '<p class="k">ما فيش طلبات تحويل.</p>');
     body += `<h3>سحوبات التجار (${pset.length})</h3>` + (pset.length ? pset.map(t => { const m = S.merchants.find(x => x.id === t.mid); return `<div class="card"><h2>${esc(m && m.name)} • ${fmt(t.amount)}</h2>
@@ -1405,7 +1423,7 @@ const A = {
     if (!u || !role || !fbdb) return toast(auth.fail || 'جاري الاتصال... حاول بعد ثواني');
     const name = $('#a_name').value.trim(), phone = $('#a_phone').value, cat = $('#reg_cat') ? $('#reg_cat').value : 'shops';
     if (!name) return toast(role === 'merchant' ? 'اكتب اسم المحل' : 'اكتب اسمك');
-    if (!normPhone(phone)) return toast('اكتب رقم ليبيانا صحيح (يبدأ بـ 092 أو 094، مثال 0921234567)');
+    if (!normPhone(phone)) return toast('اكتب رقم هاتف صحيح (مثال 0921234567 أو +213555123456)');
     busy(true);
     try {
       const ref = fbdb.collection('cashback').doc('state'), uref = fbdb.collection('users').doc(u.uid);
@@ -1459,7 +1477,7 @@ const A = {
     if (auth.busy) return;
     const name = $('#a_name').value.trim(), em = normEmail($('#a_email').value), pw = $('#a_pw').value, cat = $('#reg_cat') ? $('#reg_cat').value : 'shops', phone = $('#a_phone') ? $('#a_phone').value : '';
     if (!name) return toast(role === 'merchant' ? 'اكتب اسم المحل' : 'اكتب اسمك');
-    if (!normPhone(phone)) return toast('اكتب رقم ليبيانا صحيح (يبدأ بـ 092 أو 094، مثال 0921234567)');
+    if (!normPhone(phone)) return toast('اكتب رقم هاتف صحيح (مثال 0921234567 أو +213555123456)');
     if (!em) return toast('اكتب إيميل صحيح (مثال name@gmail.com)');
     if (pw.length < 6) return toast('كلمة السر قصيرة (6 أحرف على الأقل)');
     if (!fbAuth || !fbdb) return toast(auth.fail || 'جاري الاتصال... حاول بعد ثواني');
@@ -1541,6 +1559,14 @@ const A = {
   },
   snd() { try { localStorage.setItem('cb_snd', soundOn() ? '0' : '1'); } catch (e) {} render(); if (soundOn()) ding(); },
   sndtest() { ding(true); },
+  async ntf() {
+    if (ntfOn()) { try { localStorage.setItem('cb_ntf', '0'); } catch (e) {} render(); return; }
+    if (!('Notification' in window)) return toast('جهازك ما يدعم التنبيهات');
+    let pm = Notification.permission; if (pm !== 'granted') { try { pm = await Notification.requestPermission(); } catch (e) {} }
+    if (pm !== 'granted') return toast('ما انسمح بالتنبيهات. فعّلها من إعدادات المتصفح للموقع');
+    try { localStorage.setItem('cb_ntf', '1'); } catch (e) {} render(); toast('تم تفعيل تنبيهات النظام'); sysNotify('هذا تنبيه تجريبي من CASH BACK', true);
+  },
+  ntftest() { if (!ntfOn()) return toast('فعّل تنبيهات النظام أول'); sysNotify('هذا تنبيه تجريبي من CASH BACK', true); },
   geo() { askGeo(); },
   mloc() {
     if (!navigator.geolocation) return toast('جهازك ما يدعم تحديد الموقع');
