@@ -10,6 +10,10 @@ const uid = p => { let v; do { v = p + RND().toString(36).slice(2, 9); } while (
 const find = (arr, id, msg) => { const x = arr.find(a => a.id === id); if (!x) throw new Error(msg); return x; };
 const log = (actor, action, detail) => S.audit.unshift({ t: Date.now(), actor, action, detail: String(detail ?? '') });
 const cbExp = () => (S.settings.cbpayMin || 10) * 60000;
+const cbOf = (c, mid) => (c.cbm && c.cbm[mid]) || 0;
+const cbSum = c => r2(Object.values(c.cbm || {}).reduce((a, x) => a + x, 0));
+const freeBal = c => Math.max(0, r2(c.wallet - cbSum(c)));
+const cbAdd = (c, mid, v) => { c.cbm = c.cbm || {}; const n = r2((c.cbm[mid] || 0) + v); if (n > 0.004) c.cbm[mid] = n; else delete c.cbm[mid]; };
 const cbLive = t => t.status === 'pending' && Date.now() - t.at <= cbExp();
 
 const initial = () => ({
@@ -20,7 +24,16 @@ const initial = () => ({
   topups: [], invoices: [], txns: [], audit: [], banks: [], claims: [], cbpays: [], settles: []
 });
 
-const normPhone = p => { let d = String(p || '').replace(/[\u0660-\u0669]/g, x => x.charCodeAt(0) - 1632).replace(/\D/g, ''); if (d.startsWith('00218')) d = '0' + d.slice(5); else if (d.startsWith('218')) d = '0' + d.slice(3); else if (d.length === 9 && d[0] === '9') d = '0' + d; return /^09[24]\d{7}$/.test(d) ? d : ''; };
+const normPhone = p => {
+  const raw = String(p || '').trim().replace(/[\u0660-\u0669]/g, x => (x.charCodeAt(0) - 1632));
+  let d = raw.replace(/\D/g, ''); const plus = raw.startsWith('+') || d.startsWith('00');
+  if (d.startsWith('00')) d = d.slice(2);
+  if (/^218(9[1-4]\d{7})$/.test(d)) return '0' + d.slice(3);              // ليبي بصيغة دولية
+  if (!plus && /^09[1-4]\d{7}$/.test(d)) return d;                        // ليبي محلي
+  if (!plus && /^9[1-4]\d{7}$/.test(d)) return '0' + d;
+  if (d.length < 8 || d.length > 15) return '';                             // أي رقم آخر (جزائري أو غيره)
+  return plus ? '+' + d : d;
+};
 const notify = (to, text) => { (S.notes = S.notes || []).unshift({ id: uid('n'), to, text, t: Date.now(), read: false }); if (S.notes.length > 300) S.notes.length = 300; };
 const hashStr = s => { let x = 5381; for (let i = 0; i < s.length; i += 7) x = ((x << 5) + x + s.charCodeAt(i)) | 0; return (x >>> 0) + ':' + s.length; };
 
@@ -28,7 +41,7 @@ const L = {
   addMerchant(name, cat, phone, id) {
     if (!name.trim()) throw new Error('اكتب اسم المحل');
     const ph = normPhone(phone);
-    if (!ph) throw new Error('اكتب رقم ليبيانا صحيح (يبدأ بـ 092 أو 094، مثال 0921234567)');
+    if (!ph) throw new Error('اكتب رقم هاتف صحيح (مثال 0921234567 أو +213555123456)');
     if (S.merchants.some(x => x.phone === ph)) throw new Error('رقم الهاتف مستخدم لمحل آخر');
     const m = { id: id || uid('m'), name: name.trim(), phone: ph, cat: cat || 'shops', status: 'pending', barPrefix: '', barLen: 0, digital: 0, funded: 0, real: 0, bank: 0, bankName: '', bankAccount: '' };
     S.merchants.push(m); log('system', 'تسجيل تاجر', m.name); notify('admin', 'تاجر جديد بانتظار التفعيل: ' + m.name); return m;
@@ -36,7 +49,7 @@ const L = {
   addCustomer(name, phone, id, refId) {
     if (!name.trim()) throw new Error('اكتب الاسم');
     const ph = normPhone(phone);
-    if (!ph) throw new Error('اكتب رقم ليبيانا صحيح (يبدأ بـ 092 أو 094، مثال 0921234567)');
+    if (!ph) throw new Error('اكتب رقم هاتف صحيح (مثال 0921234567 أو +213555123456)');
     if (S.customers.some(x => x.phone === ph)) throw new Error('رقم الهاتف مستخدم لحساب آخر');
     const c = { id: id || uid('c'), name: name.trim(), phone: ph, wallet: 0 };
     if (refId && refId !== c.id && S.customers.some(x => x.id === refId)) c.ref = refId;
@@ -93,7 +106,7 @@ const L = {
     if (!(amount > 0)) throw new Error('المبلغ غير صحيح');
     const mn = S.settings.minPayout || 0;
     if (amount < mn) throw new Error('أقل مبلغ للتحويل ' + mn + ' د.ل');
-    if (amount > c.wallet) throw new Error('رصيدك غير كافٍ');
+    if (amount > freeBal(c)) throw new Error('التحويل متاح من رصيد المكافآت فقط. كاش باك كل محل يُصرف في نفس المحل');
     if (S.payouts.some(x => x.cid === cid && x.status === 'pending')) throw new Error('عندك طلب تحويل قيد المراجعة، استنى لين يتم');
     c.wallet = r2(c.wallet - amount);
     const t = { id: uid('p'), cid, amount, phone: c.phone || '', status: 'pending', at: Date.now() };
@@ -116,11 +129,15 @@ const L = {
     amount = r2(Number(amount));
     if (!(amount > 0)) throw new Error('المبلغ غير صحيح');
     if (m.status !== 'active') throw new Error('هذا المحل غير مفعّل');
-    if (amount > c.wallet) throw new Error('رصيدك غير كافٍ');
+    if (amount > r2(cbOf(c, mid) + freeBal(c))) throw new Error('رصيدك عند ' + m.name + ' هو ' + r2(cbOf(c, mid) + freeBal(c)) + ' د.ل فقط. كاش باك كل محل يُصرف في نفس المحل');
     if (S.cbpays.some(x => x.cid === cid && cbLive(x))) throw new Error('عندك طلب دفع بانتظار التاجر');
-    const t = { id: uid('b'), cid, mid, amount, status: 'pending', at: Date.now() };
-    S.cbpays.unshift(t); log(cid, 'طلب دفع بكاش باك', `${m.name} ${amount}`);
-    notify(mid, `طلب دفع بكاش باك: ${c.name} • ${amount} د.ل. افتح الرئيسية للقبول`); return t;
+    // دفع فوري بدون موافقة التاجر: ينخصم من رصيد الزبون عند هذا المحل ويصير كاش باك مستلم للتاجر
+    cbAdd(c, mid, -Math.min(cbOf(c, mid), amount));
+    c.wallet = r2(c.wallet - amount); m.cbIn = r2((m.cbIn || 0) + amount);
+    const now = Date.now(), t = { id: uid('b'), cid, mid, amount, status: 'done', at: now, done: now };
+    S.cbpays.unshift(t); log(cid, 'دفع بكاش باك', `${m.name} ${amount}`);
+    notify(mid, `استلمت دفعة كاش باك ${amount} د.ل من ${c.name}`);
+    notify(cid, `تم الدفع ${amount} د.ل من كاش باك عند ${m.name}. رصيدك ${c.wallet} د.ل`); return t;
   },
   cancelCbPay(id, cid) {
     const t = find(S.cbpays, id, 'الطلب غير موجود');
@@ -135,7 +152,8 @@ const L = {
     const m = find(S.merchants, t.mid, 'تاجر غير موجود'), c = find(S.customers, t.cid, 'زبون غير موجود');
     if (!ok) { t.status = 'rejected'; log(m.id, 'رفض دفع بكاش باك', t.amount); notify(c.id, `${m.name} رفض طلب الدفع بكاش باك ${t.amount} د.ل`); return; }
     if (!cbLive(t)) throw new Error('انتهت مدة الطلب. اطلب من الزبون يرسل طلب جديد');
-    if (c.wallet < t.amount) throw new Error('رصيد الزبون غير كافٍ الآن');
+    if (r2(cbOf(c, m.id) + freeBal(c)) < t.amount) throw new Error('رصيد الزبون عند محلك غير كافٍ الآن');
+    cbAdd(c, m.id, -Math.min(cbOf(c, m.id), t.amount));
     c.wallet = r2(c.wallet - t.amount); m.cbIn = r2((m.cbIn || 0) + t.amount);
     t.status = 'done'; t.done = Date.now();
     log(m.id, 'قبول دفع بكاش باك', `${c.name} ${t.amount}`);
@@ -171,6 +189,16 @@ const L = {
     m.payBank = bank; m.payAcct = acct; m.payName = holder;
     S.settles.unshift(t); log(mid, 'طلب سحب', `${no} ${sum}`);
     notify('admin', `طلب سحب ${no}: ${m.name} • ${sum} د.ل`); return t;
+  },
+  // تحويل الكاش باك المستلم إلى محفظة الشحن (رصيد تدفع منه العمولات) بدل سحبه للبنك
+  cbToWallet(mid) {
+    const m = find(S.merchants, mid, 'تاجر غير موجود');
+    const items = S.cbpays.filter(x => x.mid === mid && x.status === 'done' && !x.sid);
+    const sum = r2(items.reduce((a, x) => a + x.amount, 0));
+    if (!items.length || sum <= 0) throw new Error('ما عندك كاش باك مستلم للتحويل');
+    items.forEach(x => { x.sid = 'W' + Date.now(); });
+    m.cbIn = Math.max(0, r2((m.cbIn || 0) - sum)); m.digital = r2(m.digital + sum);
+    log(mid, 'تحويل كاش باك لمحفظة الشحن', sum); notify(mid, `تم تحويل ${sum} د.ل من الكاش باك المستلم إلى محفظتك. رصيدك الآن ${m.digital} د.ل`); return sum;
   },
   approveSettle(id, ref) {
     const t = find(S.settles, id, 'الطلب غير موجود');
@@ -271,10 +299,10 @@ const L = {
       m.digital = r2(m.digital - tx.amount); c.wallet = r2(c.wallet + tx.amount);
     } else {
       const mg = r2(tx.fee - tx.cashback);
-      if (c.wallet < tx.cashback + b) throw new Error('الزبون صرف جزء من الكاش باك. تواصل مع المدير');
-      if (inv && inv.wallet < b) throw new Error('مكافأة الدعوة انصرفت. تواصل مع المدير');
+      if (cbOf(c, mid) < tx.cashback || freeBal(c) < b) throw new Error('الزبون صرف جزء من الكاش باك. تواصل مع المدير');
+      if (inv && freeBal(inv) < b) throw new Error('مكافأة الدعوة انصرفت. تواصل مع المدير');
       if (S.platform < mg + b * 2) throw new Error('تعذر الإلغاء الآن. تواصل مع المدير');
-      m.digital = r2(m.digital + tx.fee); S.platform = r2(S.platform - mg); c.wallet = r2(c.wallet - tx.cashback);
+      m.digital = r2(m.digital + tx.fee); S.platform = r2(S.platform - mg); c.wallet = r2(c.wallet - tx.cashback); cbAdd(c, mid, -tx.cashback);
       if (b) { c.wallet = r2(c.wallet - b); if (inv) { inv.wallet = r2(inv.wallet - b); inv.refEarn = r2(Math.max(0, (inv.refEarn || 0) - b)); } S.platform = r2(S.platform + b * 2); c.refPaid = false; }
     }
     if (tx.cl) { const cl = S.claims.find(x => x.id === tx.cl); if (cl) { cl.status = 'cancelled'; cl.cashback = 0; } }
@@ -299,7 +327,7 @@ const L = {
     const fee = r2(cl.amount * S.settings.commission / 100), cb = r2(cl.amount * S.settings.cashback / 100), mg = r2(fee - cb);
     if (m.digital < fee) throw new Error('رصيد المحل غير كافٍ لدفع العمولة، لازم يشحن محفظته');
     const was = m.digital;
-    m.digital = r2(m.digital - fee); S.platform = r2(S.platform + mg); c.wallet = r2(c.wallet + cb);
+    m.digital = r2(m.digital - fee); S.platform = r2(S.platform + mg); c.wallet = r2(c.wallet + cb); cbAdd(c, m.id, cb);
     cl.status = 'approved'; cl.cashback = cb;
     notify(c.id, `نزل في رصيدك كاش باك ${cb} د.ل من ${m.name}`); notify(m.id, `عملية جديدة ${cl.amount} د.ل (عمولة ${fee} د.ل)`);
     if (was > 20 && m.digital <= 20) notify(m.id, 'رصيدك قارب على الانتهاء، اشحن محفظتك');
@@ -360,7 +388,7 @@ const L = {
       fee = r2(inv.amount * S.settings.commission / 100); cb = r2(inv.amount * S.settings.cashback / 100);
       if (m.digital < fee) throw new Error('رصيد التاجر غير كافٍ لدفع العمولة، لازم يشحن محفظته');
       const was = m.digital;
-      m.digital = r2(m.digital - fee); S.platform = r2(S.platform + r2(fee - cb)); c.wallet = r2(c.wallet + cb);
+      m.digital = r2(m.digital - fee); S.platform = r2(S.platform + r2(fee - cb)); c.wallet = r2(c.wallet + cb); cbAdd(c, m.id, cb);
       notify(c.id, `نزل في رصيدك كاش باك ${cb} د.ل من ${m.name}`); notify(m.id, `عملية جديدة ${inv.amount} د.ل (عمولة ${fee} د.ل)`);
       if (was > 20 && m.digital <= 20) notify(m.id, 'رصيدك قارب على الانتهاء، اشحن محفظتك');
     }
@@ -425,6 +453,7 @@ const norm = () => {
   if (S.settings.refMin === undefined) S.settings.refMin = 20;
   if (S.settings.cancelMin === undefined) S.settings.cancelMin = 30;
   S.merchants.forEach(m => { if (!m.cat) m.cat = m.id === 'm1' ? 'restaurants' : 'shops'; if (!m.status) m.status = 'active'; if (m.barLen === undefined) { m.barLen = 0; m.barPrefix = ''; } if (typeof m.cbIn !== 'number') m.cbIn = 0; });
+  S.customers.forEach(c => { if (c.cbm) return; c.cbm = {}; const earn = {}; (S.txns || []).forEach(t => { if (t.cid === c.id && t.cashback > 0) earn[t.mid] = (earn[t.mid] || 0) + t.cashback; }); (S.cbpays || []).forEach(x => { if (x.cid === c.id && x.status === 'done') earn[x.mid] = (earn[x.mid] || 0) - x.amount; }); let left = c.wallet; Object.keys(earn).forEach(mid => { const v = Math.min(r2(earn[mid]), left); if (v > 0.004) { c.cbm[mid] = r2(v); left = r2(left - v); } }); });
 };
 norm();
   const load = json => { S = JSON.parse(json); norm(); (JSON.stringify(S).match(/"id":"([^"]+)"/g) || []).forEach(x => USED.add(x.slice(6, -1))); };
@@ -439,14 +468,14 @@ norm();
 // يتحقق من هوية المستخدم (Firebase ID token) وينفذ عمليات الحسابات على السيرفر بدل المتصفح.
 
 const PROJECT = 'studio-5817063024-c14a2';
-const ADMIN_EMAIL = 'admin@cb.invalid';
+const ADMIN_EMAIL = 'imadbenhamouda509@gmail.com';
 const ORIGINS = ['https://imadbehamoda-glitch.github.io'];
 const MAX_JSON = 950000;
 
 /* ---------- صلاحيات العمليات ---------- */
 const ADMIN_ONLY = new Set(['approveTopup', 'rejectTopup', 'approvePayout', 'rejectPayout', 'setTopBank', 'setMinSettle', 'approveSettle', 'rejectSettle', 'reviewClaim', 'setAutoApprove', 'setMerchantStatus', 'setLimits', 'setClaimHours', 'addBank', 'linkBank', 'removeBank', 'setMinTopup', 'setRates', '__replace']);
 // عملية المستخدم: رقم الوسيط الذي لازم يساوي هوية صاحب الحساب
-const MERCHANT_ARG = { requestTopup: 0, requestSettle: 0, setBarcodeFormat: 0, setMerchantLoc: 0, setMerchantCat: 0, createInvoice: 0, cancelTx: 0, reviewCbPay: 2 };
+const MERCHANT_ARG = { requestTopup: 0, requestSettle: 0, setBarcodeFormat: 0, setMerchantLoc: 0, setMerchantCat: 0, createInvoice: 0, cancelTx: 0, cbToWallet: 0, reviewCbPay: 2 };
 const CUSTOMER_ARG = { requestPayout: 0, requestCbPay: 0, submitClaim: 0, cancelCbPay: 1, payInvoice: 1 };
 
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
