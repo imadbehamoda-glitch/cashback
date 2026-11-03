@@ -1324,12 +1324,14 @@ function admin() {
       <div class="pair"><label class="btn alt filebtn" style="margin-top:0">${m.cover ? 'تغيير الصورة' : 'اختيار صورة'}<input id="cv_${m.id}" type="file" accept="image/*"></label>${m.cover ? `<button class="btn ghost" data-act="rmcover" data-v="${m.id}" style="margin-top:0">حذف الصورة</button>` : ''}</div>
       <label for="bp_${m.id}">بادئة الباركود (أول أرقام باركود فواتيره)</label><input id="bp_${m.id}" dir="ltr" value="${esc(m.barPrefix || '')}">
       <label for="bl_${m.id}">طول الباركود (عدد الأرقام)</label><input id="bl_${m.id}" dir="ltr" inputmode="numeric" value="${m.barLen || ''}">
-      <div class="card" style="margin:8px 0"><h3 style="margin:0 0 6px">شحن محفظة التاجر (من المدير)</h3><div class="k">رصيده الآن: ${fmt(m.digital)}</div>
-      <label for="ac_${m.id}">المبلغ (د.ل)</label><input id="ac_${m.id}" dir="ltr" inputmode="decimal" placeholder="مثلاً 100">
-      <label for="an_${m.id}">ملاحظة (اختياري)</label><input id="an_${m.id}" maxlength="60" placeholder="مثلاً: تحويل نقدي">
-      <button class="btn" data-act="admcharge" data-v="${m.id}">شحن المحفظة</button></div>
       <p class="k">${m.barPrefix || m.barLen ? 'فواتير هذا المحل تتقبل تلقائياً لو طابقت الشروط.' : 'بدون شروط، فواتير هذا المحل تروح للمراجعة.'}</p>
       <div class="pair"><button class="btn" data-act="savefmt" data-v="${m.id}">حفظ الشروط</button><button class="btn ${m.status === 'active' ? 'danger' : 'alt'}" data-act="togglem" data-v="${m.id}">${m.status === 'active' ? 'إيقاف' : 'تفعيل'}</button></div></div>`).join('');
+  } else if (ui.tab === 'charge') {
+    body = `<div class="card"><h2>شحن محفظة تاجر</h2><p class="k">اختار التاجر واكتب المبلغ، ويتضاف لمحفظته مباشرة.</p>
+      <label for="ch_m" style="margin-top:0">التاجر</label><select id="ch_m">${S.merchants.map(m => `<option value="${m.id}"${ui.chM === m.id ? ' selected' : ''}>${esc(m.name)} — ${fmt(m.digital)}</option>`).join('')}</select>
+      <label for="ch_a">المبلغ (د.ل)</label><input id="ch_a" dir="ltr" inputmode="decimal" placeholder="مثلاً 100">
+      <label for="ch_n">ملاحظة (اختياري)</label><input id="ch_n" maxlength="60" placeholder="مثلاً: تحويل نقدي">
+      <button class="btn" data-act="admcharge">شحن المحفظة</button></div>` + (S.merchants.length ? '' : '<p class="k">ما فيه تجار بعد.</p>');
   } else if (ui.tab === 'banks') {
     body = bankForm();
   } else {
@@ -1358,7 +1360,7 @@ function admin() {
       ${ui.confirmRestore ? '<p class="err">سيتم استبدال كل البيانات الحالية بالنسخة المختارة على كل الأجهزة.</p><div class="pair"><button class="btn danger" data-act="dorestore">تأكيد الاسترجاع</button><button class="btn ghost" data-act="cancelrestore">إلغاء</button></div>'
         : '<label class="btn ghost" for="bk_file" style="display:block;text-align:center;margin-top:8px;cursor:pointer">استرجاع من نسخة محفوظة</label><input id="bk_file" type="file" accept=".json,application/json" style="display:none">'}</div>`;
   }
-  return shell('لوحة المدير', [['overview', 'نظرة'], ['merchants', 'التجار'], ['requests', `الطلبات (${pending.length + ppay.length + pset.length + S.claims.filter(x => x.status === 'pending').length})`], ['settings', 'الإعدادات']], body);
+  return shell('لوحة المدير', [['overview', 'نظرة'], ['merchants', 'التجار'], ['charge', 'شحن'], ['requests', `الطلبات (${pending.length + ppay.length + pset.length + S.claims.filter(x => x.status === 'pending').length})`], ['settings', 'الإعدادات']], body);
 }
 
 function render() {
@@ -1370,7 +1372,7 @@ function render() {
   if (!auth.ready) html = loadingHtml('جاري التحميل...');
   else if (route === 'admin') {
     if (!isAdmin()) html = adminLogin();
-    else { if (!['overview', 'merchants', 'requests', 'settings', 'notes'].includes(ui.tab)) ui.tab = 'overview'; html = admin(); }
+    else { if (!['overview', 'merchants', 'charge', 'requests', 'settings', 'notes'].includes(ui.tab)) ui.tab = 'overview'; html = admin(); }
   }
   else if (!auth.user) html = authHtml();
   else if (auth.user && !auth.profile && auth.pend) html = completeHtml();
@@ -1529,11 +1531,13 @@ const A = {
   savetopbank() { const g = id => ($(id) ? $(id).value : ''); if (run(() => L.setTopBank({ bank: g('#tb_bank'), holder: g('#tb_name'), acct: g('#tb_acct') }))) toast('انحفظ حساب الشحن'); },
   mbank() { if (run(() => L.setMerchantCat(ui.actor, $('#mb_cat').value))) toast('انحفظ'); },
   savefmt(v) { if (run(() => L.setBarcodeFormat(v, $('#bp_' + v).value, $('#bl_' + v).value))) toast('انحفظت الشروط'); },
-  admcharge(v) {
-    const amt = Number(($('#ac_' + v) || {}).value), note = ($('#an_' + v) || {}).value || '';
+  admcharge() {
+    const v = ($('#ch_m') || {}).value, amt = Number(($('#ch_a') || {}).value), note = ($('#ch_n') || {}).value || '';
+    if (!v) return toast('اختار التاجر');
     if (!(amt > 0)) return toast('اكتب المبلغ');
     const m = S.merchants.find(x => x.id === v);
     if (!confirm('تشحن محفظة ' + (m ? m.name : '') + ' بمبلغ ' + amt + ' د.ل ؟')) return;
+    ui.chM = v;
     if (run(() => L.adminCharge(v, amt, note))) toast('تم الشحن');
   },
   togglem(v) { run(() => L.setMerchantStatus(v)); },
